@@ -1,0 +1,144 @@
+Conv-input:224x224x3-output:112x112x32:
+  mean: 1.0
+Conv_1-input:7x7x320-output:7x7x1280:
+  mean: 0.41
+Logits-input:7x7x1280-output:1000:
+  mean: 1.24
+expanded_conv-input:112x112x16-output:56x56x24-expand:3-kernel:3-stride:2-idskip:0:
+  mean: 1.13
+expanded_conv-input:112x112x16-output:56x56x24-expand:3-kernel:5-stride:2-idskip:0:
+  mean: 1.9
+expanded_conv-input:112x112x16-output:56x56x24-expand:3-kernel:7-stride:2-idskip:0:
+  mean: 2.73
+expanded_conv-input:112x112x16-output:56x56x24-expand:6-kernel:3-stride:2-idskip:0:
+  mean: 2.18
+expanded_conv-input:112x112x16-output:56x56x24-expand:6-kernel:5-stride:2-idskip:0:
+  mean: 3.7
+expanded_conv-input:112x112x16-output:56x56x24-expand:6-kernel:7-stride:2-idskip:0:
+  mean: 5.27
+expanded_conv-input:112x112x32-output:112x112x16-expand:1-kernel:3-stride:1-idskip:0:
+  mean: 0.74
+expanded_conv-input:112x112x32-output:112x112x16-expand:1-kernel:5-stride:1-idskip:0:
+  mean: 3.01
+expanded_conv-input:112x112x32-output:112x112x16-expand:1-kernel:7-stride:1-idskip:0:
+  mean: 5.25
+expanded_conv-input:14x14x80-output:14x14x80-expand:3-kernel:3-stride:1-idskip:1:
+  mean: 0.24
+expanded_conv-input:14x14x80-output:14x14x80-expand:3-kernel:5-stride:1-idskip:1:
+  mean: 0.44
+expanded_conv-input:14x14x80-output:14x14x80-expand:3-kernel:7-stride:1-idskip:1:
+  mean: 0.61
+expanded_conv-input:14x14x80-output:14x14x80-expand:6-kernel:3-stride:1-idskip:1:
+  mean: 0.45
+expanded_conv-input:14x14x80-output:14x14x80-expand:6-kernel:5-stride:1-idskip:1:
+  mean: 0.85
+expanded_conv-input:14x14x80-output:14x14x80-expand:6-kernel:7-stride:1-idskip:1:
+  mean: 1.2
+expanded_conv-input:14x14x80-output:14x14x96-expand:3-kernel:3-stride:1-idskip:0:
+  mean: 0.24
+expanded_conv-input:14x14x80-output:14x14x96-expand:3-kernel:5-stride:1-idskip:0:
+  mean: 0.44
+expanded_conv-input:14x14x80-output:14x14x96-expand:3-kernel:7-stride:1-idskip:0:
+  mean: 0.61
+expanded_conv-input:14x14x80-output:14x14x96-expand:6-kernel:3-stride:1-idskip:0:
+  mean: 0.45
+expanded_conv-input:14x14x80-output:14x14x96-expand:6-kernel:5-stride:1-idskip:0:
+  mean: 0.85
+expanded_conv-input:14x14x80-output:14x14x96-expand:6-kernel:7-stride:1-idskip:0:
+  mean: 1.19
+expanded_conv-input:14x14x96-output:14x14x96-expand:3-kernel:3-stride:1-idskip:1:
+  mean: 0.31
+expanded_conv-input:14x14x96-output:14x14x96-expand:3-kernel:5-stride:1-idskip:1:
+  mean: 0.56
+expanded_conv-input:14x14x96-output:14x14x96-expand:3-kernel:7-stride:1-idskip:1:
+  mean: 0.76
+expanded_conv-input:14x14x96-output:14x14x96-expand:6-kernel:3-stride:1-idskip:1:
+  mean: 0.59
+expanded_conv-input:14x14x96-output:14x14x96-expand:6-kernel:5-stride:1-idskip:1:
+  mean: 1.08
+expanded_conv-input:14x14x96-output:14x14x96-expand:6-kernel:7-stride:1-idskip:1:
+  mean: 1.5
+expanded_conv-input:14x14x96-output:7x7x192-expand:3-kernel:3-stride:2-idskip:0:
+  mean: 0.21
+expanded_conv-input:14x14x96-output:7x7x192-expand:3-kernel:5-stride:2-idskip:0:
+  mean: 0.26
+expanded_conv-input:14x14x96-output:7x7x192-expand:3-kernel:7-stride:2-idskip:0:
+  mean: 0.32
+expanded_conv-input:14x14x96-output:7x7x192-expand:6-kernel:3-stride:2-idskip:0:
+  mean: 0.41
+expanded_conv-input:14x14x96-output:7x7x192-expand:6-kernel:5-stride:2-idskip:0:
+  mean: 0.52
+expanded_conv-input:14x14x96-output:7x7x192-expand:6-kernel:7-stride:2-idskip:0:
+  mean: 0.63
+expanded_conv-input:28x28x40-output:14x14x80-expand:3-kernel:3-stride:2-idskip:0:
+  mean: 0.23
+expanded_conv-input:28x28x40-output:14x14x80-expand:3-kernel:5-stride:2-idskip:0:
+  mean: 0.34
+expanded_conv-input:28x28x40-output:14x14x80-expand:3-kernel:7-stride:2-idskip:0:
+  mean: 0.45
+expanded_conv-input:28x28x40-output:14x14x80-expand:6-kernel:3-stride:2-idskip:0:
+  mean: 0.42
+expanded_conv-input:28x28x40-output:14x14x80-expand:6-kernel:5-stride:2-idskip:0:
+  mean: 0.63
+expanded_conv-input:28x28x40-output:14x14x80-expand:6-kernel:7-stride:2-idskip:0:
+  mean: 0.84
+expanded_conv-input:28x28x40-output:28x28x40-expand:3-kernel:3-stride:1-idskip:1:
+  mean: 0.37
+expanded_conv-input:28x28x40-output:28x28x40-expand:3-kernel:5-stride:1-idskip:1:
+  mean: 0.86
+expanded_conv-input:28x28x40-output:28x28x40-expand:3-kernel:7-stride:1-idskip:1:
+  mean: 1.33
+expanded_conv-input:28x28x40-output:28x28x40-expand:6-kernel:3-stride:1-idskip:1:
+  mean: 0.67
+expanded_conv-input:28x28x40-output:28x28x40-expand:6-kernel:5-stride:1-idskip:1:
+  mean: 1.56
+expanded_conv-input:28x28x40-output:28x28x40-expand:6-kernel:7-stride:1-idskip:1:
+  mean: 2.38
+expanded_conv-input:56x56x24-output:28x28x40-expand:3-kernel:3-stride:2-idskip:0:
+  mean: 0.46
+expanded_conv-input:56x56x24-output:28x28x40-expand:3-kernel:5-stride:2-idskip:0:
+  mean: 0.74
+expanded_conv-input:56x56x24-output:28x28x40-expand:3-kernel:7-stride:2-idskip:0:
+  mean: 1.04
+expanded_conv-input:56x56x24-output:28x28x40-expand:6-kernel:3-stride:2-idskip:0:
+  mean: 0.86
+expanded_conv-input:56x56x24-output:28x28x40-expand:6-kernel:5-stride:2-idskip:0:
+  mean: 1.36
+expanded_conv-input:56x56x24-output:28x28x40-expand:6-kernel:7-stride:2-idskip:0:
+  mean: 1.91
+expanded_conv-input:56x56x24-output:56x56x24-expand:3-kernel:3-stride:1-idskip:1:
+  mean: 0.82
+expanded_conv-input:56x56x24-output:56x56x24-expand:3-kernel:5-stride:1-idskip:1:
+  mean: 2.09
+expanded_conv-input:56x56x24-output:56x56x24-expand:3-kernel:7-stride:1-idskip:1:
+  mean: 3.35
+expanded_conv-input:56x56x24-output:56x56x24-expand:6-kernel:3-stride:1-idskip:1:
+  mean: 1.43
+expanded_conv-input:56x56x24-output:56x56x24-expand:6-kernel:5-stride:1-idskip:1:
+  mean: 3.69
+expanded_conv-input:56x56x24-output:56x56x24-expand:6-kernel:7-stride:1-idskip:1:
+  mean: 6.0
+expanded_conv-input:7x7x192-output:7x7x192-expand:3-kernel:3-stride:1-idskip:1:
+  mean: 0.28
+expanded_conv-input:7x7x192-output:7x7x192-expand:3-kernel:5-stride:1-idskip:1:
+  mean: 0.37
+expanded_conv-input:7x7x192-output:7x7x192-expand:3-kernel:7-stride:1-idskip:1:
+  mean: 0.44
+expanded_conv-input:7x7x192-output:7x7x192-expand:6-kernel:3-stride:1-idskip:1:
+  mean: 0.54
+expanded_conv-input:7x7x192-output:7x7x192-expand:6-kernel:5-stride:1-idskip:1:
+  mean: 0.75
+expanded_conv-input:7x7x192-output:7x7x192-expand:6-kernel:7-stride:1-idskip:1:
+  mean: 0.9
+expanded_conv-input:7x7x192-output:7x7x320-expand:3-kernel:3-stride:1-idskip:0:
+  mean: 0.34
+expanded_conv-input:7x7x192-output:7x7x320-expand:3-kernel:5-stride:1-idskip:0:
+  mean: 0.43
+expanded_conv-input:7x7x192-output:7x7x320-expand:3-kernel:7-stride:1-idskip:0:
+  mean: 0.5
+expanded_conv-input:7x7x192-output:7x7x320-expand:6-kernel:3-stride:1-idskip:0:
+  mean: 0.66
+expanded_conv-input:7x7x192-output:7x7x320-expand:6-kernel:5-stride:1-idskip:0:
+  mean: 0.86
+expanded_conv-input:7x7x192-output:7x7x320-expand:6-kernel:7-stride:1-idskip:0:
+  mean: 1.01

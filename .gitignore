@@ -105,3 +105,11 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+
+.amltconfig
+.amltignore
+itp/*
+tmp*/*
+**/play.py
+**/mobile_trim_int8.csv
+run.sh

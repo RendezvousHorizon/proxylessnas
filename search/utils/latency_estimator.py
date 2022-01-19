@@ -2,6 +2,7 @@
 # Han Cai, Ligeng Zhu, Song Han
 # International Conference on Learning Representations (ICLR), 2019.
 
+import pathlib
 import yaml
 import os
 import sys
@@ -10,6 +11,8 @@ try:
 except ImportError:
     from urllib.request import urlretrieve
 
+FILE_PATH = pathlib.Path(__file__).parent.resolve()
+INT8_LUT_PATH = os.path.join(FILE_PATH, 'lut/mobile_trim_int8.yaml')
 
 def download_url(url, model_dir='~/.torch/proxyless_nas', overwrite=False):
     target_dir = url.split('//')[-1]
@@ -27,11 +30,9 @@ def download_url(url, model_dir='~/.torch/proxyless_nas', overwrite=False):
 
 
 class LatencyEstimator(object):
-    def __init__(self, url='https://file.lzhu.me/projects/proxylessNAS/LatencyTools/mobile_trim.yaml'):
-        fname = download_url(url, overwrite=True)
-
+    def __init__(self, fname=INT8_LUT_PATH):
         with open(fname, 'r') as fp:
-            self.lut = yaml.load(fp)
+            self.lut = yaml.safe_load(fp)
 
     @staticmethod
     def repr_shape(shape):

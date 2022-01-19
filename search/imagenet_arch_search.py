@@ -8,6 +8,9 @@ from models import ImagenetRunConfig
 from nas_manager import *
 from models.super_nets.super_proxyless import SuperProxylessNASNets
 
+
+TARGET_INT8_LATENCY = 20
+
 # ref values
 ref_values = {
     'flops': {
@@ -20,7 +23,7 @@ ref_values = {
     },
     # ms
     'mobile': {
-        '1.00': 80,
+        '1.00': TARGET_INT8_LATENCY,
     },
     'cpu': {},
     'gpu8': {},
@@ -40,6 +43,7 @@ parser.add_argument('--lr_schedule_type', type=str, default='cosine')
 # lr_schedule_param
 
 parser.add_argument('--dataset', type=str, default='imagenet', choices=['imagenet'])
+parser.add_argument('--dataset_path', type=str, default=None, help='imagenet2012 dataset path')
 parser.add_argument('--train_batch_size', type=int, default=256)
 parser.add_argument('--test_batch_size', type=int, default=1000)
 parser.add_argument('--valid_size', type=int, default=50000)

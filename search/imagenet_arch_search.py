@@ -3,6 +3,7 @@
 # International Conference on Learning Representations (ICLR), 2019.
 
 import argparse
+import torch.distributed as dist
 
 from models import ImagenetRunConfig
 from nas_manager import *
@@ -30,8 +31,8 @@ ref_values = {
 }
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--path', type=str, default=None)
-parser.add_argument('--gpu', help='gpu available', default='0,1,2,3')
+parser.add_argument('--path', type=str, default=None, help='dir path to save checkpoint and log')
+parser.add_argument('--local_rank', required=True, type=int, help='required for torch.distributed.launch')
 parser.add_argument('--resume', action='store_true')
 parser.add_argument('--debug', help='freeze the weight parameters', action='store_true')
 parser.add_argument('--manual_seed', default=0, type=int)
@@ -44,8 +45,8 @@ parser.add_argument('--lr_schedule_type', type=str, default='cosine')
 
 parser.add_argument('--dataset', type=str, default='imagenet', choices=['imagenet'])
 parser.add_argument('--dataset_path', type=str, default=None, help='imagenet2012 dataset path')
-parser.add_argument('--train_batch_size', type=int, default=256)
-parser.add_argument('--test_batch_size', type=int, default=1000)
+parser.add_argument('--train_batch_size', type=int, default=64)
+parser.add_argument('--test_batch_size', type=int, default=200)
 parser.add_argument('--valid_size', type=int, default=50000)
 
 parser.add_argument('--opt_type', type=str, default='sgd', choices=['sgd'])
@@ -107,11 +108,12 @@ parser.add_argument('--rl_tradeoff_ratio', type=float, default=0.1)
 if __name__ == '__main__':
     args = parser.parse_args()
 
+    # initial distributed training
+    dist.init_process_group(backend='nccl')
+    
     torch.manual_seed(args.manual_seed)
     torch.cuda.manual_seed_all(args.manual_seed)
     np.random.seed(args.manual_seed)
-
-    os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
     os.makedirs(args.path, exist_ok=True)
 
@@ -178,15 +180,16 @@ if __name__ == '__main__':
     else:
         raise NotImplementedError
 
-    print('Run config:')
-    for k, v in run_config.config.items():
-        print('\t%s: %s' % (k, v))
-    print('Architecture Search config:')
-    for k, v in arch_search_config.config.items():
-        print('\t%s: %s' % (k, v))
+    if args.local_rank == 0:
+        print('Run config:')
+        for k, v in run_config.config.items():
+            print('\t%s: %s' % (k, v))
+        print('Architecture Search config:')
+        for k, v in arch_search_config.config.items():
+            print('\t%s: %s' % (k, v))
 
     # arch search run manager
-    arch_search_run_manager = ArchSearchRunManager(args.path, super_net, run_config, arch_search_config)
+    arch_search_run_manager = ArchSearchRunManager(args.path, super_net, run_config, arch_search_config, args.local_rank)
 
     # resume
     if args.resume:

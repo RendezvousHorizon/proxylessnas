@@ -2,11 +2,55 @@
 # Han Cai, Ligeng Zhu, Song Han
 # International Conference on Learning Representations (ICLR), 2019.
 
+import math
+from typing import  Sequence
+
 import torch.utils.data
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
+from torch.utils.data import Dataset
+from torch.utils.data.distributed import DistributedSampler
 
 from data_providers.base_provider import *
+
+
+
+class DistributedSubsetRandomSampler(DistributedSampler):
+    
+    def __init__(self, dataset: Dataset, indices: Sequence[int]) -> None:
+        self.indices = indices
+        super().__init__(dataset)
+        
+        if self.drop_last and len(self.indices) % self.num_replicas != 0:
+            self.num_samples = math.ceil(
+                (len(self.indices) - self.num_replicas) / self.num_replicas
+            )
+        else:
+            self.num_samples = math.ceil(len(self.indices) / self.num_replicas)
+        self.total_size = self.num_samples * self.num_replicas
+
+    def __iter__(self):
+        g = torch.Generator()
+        g.manual_seed(self.seed + self.epoch)
+        indices = [self.indices[i] for i in torch.randperm(len(self.indices), generator=g)]
+        
+        if not self.drop_last:
+            # add extra samples to make it evenly divisible
+            padding_size = self.total_size - len(indices)
+            if padding_size <= len(indices):
+                indices += indices[:padding_size]
+            else:
+                indices += (indices * math.ceil(padding_size / len(indices)))[:padding_size]
+        else:
+            # remove tail of data to make it evenly divisible.
+            indices = indices[:self.total_size]
+        assert len(indices) == self.total_size
+
+        # subsample
+        indices = indices[self.rank:self.total_size:self.num_replicas]
+        assert len(indices) == self.num_samples
+
+        return iter(indices)
 
 
 class ImagenetDataProvider(DataProvider):
@@ -26,8 +70,8 @@ class ImagenetDataProvider(DataProvider):
             train_indexes, valid_indexes = self.random_sample_valid_set(
                 [cls for _, cls in train_dataset.samples], valid_size, self.n_classes,
             )
-            train_sampler = torch.utils.data.sampler.SubsetRandomSampler(train_indexes)
-            valid_sampler = torch.utils.data.sampler.SubsetRandomSampler(valid_indexes)
+            train_sampler = DistributedSubsetRandomSampler(train_dataset, train_indexes)
+            valid_sampler = DistributedSubsetRandomSampler(train_dataset, valid_indexes)
 
             valid_dataset = datasets.ImageFolder(self.train_path, transforms.Compose([
                 transforms.Resize(self.resize_value),

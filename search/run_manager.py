@@ -11,6 +11,7 @@ import copy
 import torch.nn.parallel
 import torch.backends.cudnn as cudnn
 import torch.optim
+from torch.nn.parallel import DistributedDataParallel
 
 from utils import *
 from models.normal_nets.proxyless_nets import ProxylessNASNets
@@ -162,11 +163,12 @@ class RunConfig:
 
 class RunManager:
 
-    def __init__(self, path, net, run_config: RunConfig, out_log=True, measure_latency=None):
+    def __init__(self, path, net, run_config: RunConfig, out_log=True, measure_latency=None, local_rank=-1):
         self.path = path
         self.net = net
         self.run_config = run_config
         self.out_log = out_log
+        self.local_rank = local_rank
 
         self._logs_path, self._save_path = None, None
         self.best_acc = 0
@@ -181,9 +183,9 @@ class RunManager:
 
         # move network to GPU if available
         if torch.cuda.is_available():
-            self.device = torch.device('cuda:0')
-            self.net = torch.nn.DataParallel(self.net)
+            self.device = torch.device('cuda', self.local_rank)
             self.net.to(self.device)
+            self.net = DistributedDataParallel(self.net, device_ids=[self.local_rank], find_unused_parameters=True)
             cudnn.benchmark = True
         else:
             raise ValueError
@@ -226,7 +228,7 @@ class RunManager:
     def net_flops(self):
         data_shape = [1] + list(self.run_config.data_provider.data_shape)
 
-        if isinstance(self.net, nn.DataParallel):
+        if isinstance(self.net, DistributedDataParallel):
             net = self.net.module
         else:
             net = self.net
@@ -331,12 +333,14 @@ class RunManager:
         return sum(measured_latency['sample']) / n_sample, measured_latency
 
     def print_net_info(self, measure_latency=None):
+        if self.local_rank != 0:
+            return 
         # network architecture
         if self.out_log:
             print(self.net)
 
         # parameters
-        if isinstance(self.net, nn.DataParallel):
+        if isinstance(self.net, DistributedDataParallel):
             total_params = count_parameters(self.net.module)
         else:
             total_params = count_parameters(self.net)
@@ -368,6 +372,9 @@ class RunManager:
     """ save and load models """
 
     def save_model(self, checkpoint=None, is_best=False, model_name=None):
+        if self.local_rank != 0:
+            return
+
         if checkpoint is None:
             checkpoint = {'state_dict': self.net.module.state_dict()}
 
@@ -394,15 +401,16 @@ class RunManager:
                     model_fname = model_fname[:-1]
         # noinspection PyBroadException
         try:
-            if model_fname is None or not os.path.exists(model_fname):
-                model_fname = '%s/checkpoint.pth.tar' % self.save_path
-                with open(latest_fname, 'w') as fout:
-                    fout.write(model_fname + '\n')
+            if self.local_rank == 0:
+                if model_fname is None or not os.path.exists(model_fname):
+                    model_fname = '%s/checkpoint.pth.tar' % self.save_path
+                    with open(latest_fname, 'w') as fout:
+                        fout.write(model_fname + '\n')
             if self.out_log:
                 print("=> loading checkpoint '{}'".format(model_fname))
 
             if torch.cuda.is_available():
-                checkpoint = torch.load(model_fname)
+                checkpoint = torch.load(model_fname, map_location=self.device)
             else:
                 checkpoint = torch.load(model_fname, map_location='cpu')
 
@@ -427,6 +435,9 @@ class RunManager:
                 print('fail to load checkpoint from %s' % self.save_path)
 
     def save_config(self, print_info=True):
+        if self.local_rank != 0:
+            return
+
         """ dump run_config and net_config to the model_folder """
         os.makedirs(self.path, exist_ok=True)
         net_save_path = os.path.join(self.path, 'net.config')
@@ -442,6 +453,9 @@ class RunManager:
     """ train and test """
 
     def write_log(self, log_str, prefix, should_print=True):
+        if self.local_rank != 0:
+            return 
+
         """ prefix: valid, train, test """
         if prefix in ['valid', 'test']:
             with open(os.path.join(self.logs_path, 'valid_console.txt'), 'a') as fout:
@@ -457,6 +471,8 @@ class RunManager:
             print(log_str)
 
     def validate(self, is_test=True, net=None, use_train_mode=False, return_top5=False):
+        if self.local_rank != 0:
+            return
         if is_test:
             data_loader = self.run_config.test_loader
         else:
@@ -569,7 +585,8 @@ class RunManager:
             return batch_log
 
         for epoch in range(self.start_epoch, self.run_config.n_epochs):
-            print('\n', '-' * 30, 'Train epoch: %d' % (epoch + 1), '-' * 30, '\n')
+            if self.local_rank == 0:
+                print('\n', '-' * 30, 'Train epoch: %d' % (epoch + 1), '-' * 30, '\n')
 
             end = time.time()
             train_top1, train_top5 = self.train_one_epoch(
@@ -577,30 +594,34 @@ class RunManager:
                 lambda i, batch_time, data_time, losses, top1, top5, new_lr:
                 train_log_func(epoch, i, batch_time, data_time, losses, top1, top5, new_lr),
             )
-            time_per_epoch = time.time() - end
-            seconds_left = int((self.run_config.n_epochs - epoch - 1) * time_per_epoch)
-            print('Time per epoch: %s, Est. complete in: %s' % (
-                str(timedelta(seconds=time_per_epoch)),
-                str(timedelta(seconds=seconds_left))))
 
-            if (epoch + 1) % self.run_config.validation_frequency == 0:
-                val_loss, val_acc, val_acc5 = self.validate(is_test=False, return_top5=True)
-                is_best = val_acc > self.best_acc
-                self.best_acc = max(self.best_acc, val_acc)
-                val_log = 'Valid [{0}/{1}]\tloss {2:.3f}\ttop-1 acc {3:.3f} ({4:.3f})'.\
-                    format(epoch + 1, self.run_config.n_epochs, val_loss, val_acc, self.best_acc)
-                if print_top5:
-                    val_log += '\ttop-5 acc {0:.3f}\tTrain top-1 {top1.avg:.3f}\ttop-5 {top5.avg:.3f}'.\
-                        format(val_acc5, top1=train_top1, top5=train_top5)
+            if self.local_rank == 0:
+                time_per_epoch = time.time() - end
+                seconds_left = int((self.run_config.n_epochs - epoch - 1) * time_per_epoch)
+                print('Time per epoch: %s, Est. complete in: %s' % (
+                        str(timedelta(seconds=time_per_epoch)),
+                        str(timedelta(seconds=seconds_left))))
+
+                if (epoch + 1) % self.run_config.validation_frequency == 0:
+                    val_loss, val_acc, val_acc5 = self.validate(is_test=False, return_top5=True)
+                    is_best = val_acc > self.best_acc
+                    self.best_acc = max(self.best_acc, val_acc)
+                    val_log = 'Valid [{0}/{1}]\tloss {2:.3f}\ttop-1 acc {3:.3f} ({4:.3f})'.\
+                        format(epoch + 1, self.run_config.n_epochs, val_loss, val_acc, self.best_acc)
+                    if print_top5:
+                        val_log += '\ttop-5 acc {0:.3f}\tTrain top-1 {top1.avg:.3f}\ttop-5 {top5.avg:.3f}'.\
+                            format(val_acc5, top1=train_top1, top5=train_top5)
+                    else:
+                        val_log += '\tTrain top-1 {top1.avg:.3f}'.format(top1=train_top1)
+                    self.write_log(val_log, 'valid')
                 else:
-                    val_log += '\tTrain top-1 {top1.avg:.3f}'.format(top1=train_top1)
-                self.write_log(val_log, 'valid')
-            else:
-                is_best = False
+                    is_best = False
 
-            self.save_model({
-                'epoch': epoch,
-                'best_acc': self.best_acc,
-                'optimizer': self.optimizer.state_dict(),
-                'state_dict': self.net.module.state_dict(),
-            }, is_best=is_best)
+                self.save_model({
+                    'epoch': epoch,
+                    'best_acc': self.best_acc,
+                    'optimizer': self.optimizer.state_dict(),
+                    'state_dict': self.net.module.state_dict(),
+                }, is_best=is_best)
+            torch.distributed.barrier()
+            

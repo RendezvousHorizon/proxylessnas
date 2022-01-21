@@ -8,7 +8,7 @@ from typing import  Sequence
 import torch.utils.data
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, SubsetRandomSampler
 from torch.utils.data.distributed import DistributedSampler
 
 from data_providers.base_provider import *
@@ -71,7 +71,7 @@ class ImagenetDataProvider(DataProvider):
                 [cls for _, cls in train_dataset.samples], valid_size, self.n_classes,
             )
             train_sampler = DistributedSubsetRandomSampler(train_dataset, train_indexes)
-            valid_sampler = DistributedSubsetRandomSampler(train_dataset, valid_indexes)
+            valid_sampler = SubsetRandomSampler(valid_indexes)
 
             valid_dataset = datasets.ImageFolder(self.train_path, transforms.Compose([
                 transforms.Resize(self.resize_value),

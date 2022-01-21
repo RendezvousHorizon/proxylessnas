@@ -254,7 +254,8 @@ class ArchSearchRunManager:
         T_total = warmup_epochs * nBatch
 
         for epoch in range(self.warmup_epoch, warmup_epochs):
-            print('\n', '-' * 30, 'Warmup epoch: %d' % (epoch + 1), '-' * 30, '\n')
+            if self.run_manager.local_rank == 0:
+                print('\n', '-' * 30, 'Warmup epoch: %d' % (epoch + 1), '-' * 30, '\n')
             batch_time = AverageMeter()
             data_time = AverageMeter()
             losses = AverageMeter()

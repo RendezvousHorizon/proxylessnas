@@ -471,15 +471,13 @@ class RunManager:
             print(log_str)
 
     def validate(self, is_test=True, net=None, use_train_mode=False, return_top5=False):
-        if self.local_rank != 0:
-            return
         if is_test:
             data_loader = self.run_config.test_loader
         else:
             data_loader = self.run_config.valid_loader
 
         if net is None:
-            net = self.net
+            net = self.net.module # TODO: tmp work around to only validate on rank 0
 
         if use_train_mode:
             net.train()

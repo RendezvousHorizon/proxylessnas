@@ -8,6 +8,7 @@ import os
 import json
 
 import torch
+import torch.distributed as dist
 
 from models import *
 from run_manager import RunManager
@@ -15,8 +16,8 @@ from run_manager import RunManager
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--path', type=str, default=None)
-parser.add_argument('--gpu', help='gpu available', default='0,1,2,3')
 parser.add_argument('--train', action='store_true')
+parser.add_argument('--local_rank', required=True, type=int, help='required for torch.distributed.launch')
 
 parser.add_argument('--manual_seed', default=0, type=int)
 parser.add_argument('--resume', action='store_true')
@@ -28,6 +29,7 @@ parser.add_argument('--lr_schedule_type', type=str, default='cosine')
 # lr_schedule_param
 
 parser.add_argument('--dataset', type=str, default='imagenet', choices=['imagenet'])
+parser.add_argument('--dataset_path', type=str, required=True, help='imagenet2012 dataset path')
 parser.add_argument('--train_batch_size', type=int, default=256)
 parser.add_argument('--test_batch_size', type=int, default=500)
 parser.add_argument('--valid_size', type=int, default=None)
@@ -60,12 +62,13 @@ parser.add_argument('--dropout', type=float, default=0)
 
 if __name__ == '__main__':
     args = parser.parse_args()
+    
+    # initial distributed training
+    dist.init_process_group(backend='nccl')
 
     torch.manual_seed(args.manual_seed)
     torch.cuda.manual_seed_all(args.manual_seed)
     np.random.seed(args.manual_seed)
-
-    os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
     os.makedirs(args.path, exist_ok=True)
 
@@ -89,9 +92,10 @@ if __name__ == '__main__':
         run_config = ImagenetRunConfig(
             **args.__dict__
         )
-    print('Run config:')
-    for k, v in run_config.config.items():
-        print('\t%s: %s' % (k, v))
+    if args.local_rank == 1:
+        print('Run config:')
+        for k, v in run_config.config.items():
+            print('\t%s: %s' % (k, v))
 
     # prepare network
     net_config_path = '%s/net.config' % args.path
@@ -113,7 +117,7 @@ if __name__ == '__main__':
             raise ValueError('do not support: %s' % args.net)
 
     # build run manager
-    run_manager = RunManager(args.path, net, run_config, measure_latency=args.latency)
+    run_manager = RunManager(args.path, net, run_config, measure_latency=args.latency, local_rank=args.local_rank, find_unused_parameters=False)
     run_manager.save_config(print_info=True)
 
     # load checkpoints
@@ -161,12 +165,13 @@ if __name__ == '__main__':
         }
 
     # test
-    print('Test on test set')
-    loss, acc1, acc5 = run_manager.validate(is_test=True, return_top5=True)
-    log = 'test_loss: %f\t test_acc1: %f\t test_acc5: %f' % (loss, acc1, acc5)
-    run_manager.write_log(log, prefix='test')
-    output_dict = {
-        **output_dict,
-        'test_loss': '%f' % loss, 'test_acc1': '%f' % acc1, 'test_acc5': '%f' % acc5
-    }
-    json.dump(output_dict, open('%s/output' % args.path, 'w'), indent=4)
+    if args.local_rank == 0:
+        print('Test on test set')
+        loss, acc1, acc5 = run_manager.validate(is_test=True, return_top5=True)
+        log = 'test_loss: %f\t test_acc1: %f\t test_acc5: %f' % (loss, acc1, acc5)
+        run_manager.write_log(log, prefix='test')
+        output_dict = {
+            **output_dict,
+            'test_loss': '%f' % loss, 'test_acc1': '%f' % acc1, 'test_acc5': '%f' % acc5
+        }
+        json.dump(output_dict, open('%s/output' % args.path, 'w'), indent=4)

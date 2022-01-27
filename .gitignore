@@ -113,3 +113,4 @@ tmp*/*
 **/play.py
 **/mobile_trim_int8.csv
 run.sh
+results/

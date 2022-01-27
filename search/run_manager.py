@@ -163,7 +163,7 @@ class RunConfig:
 
 class RunManager:
 
-    def __init__(self, path, net, run_config: RunConfig, out_log=True, measure_latency=None, local_rank=-1):
+    def __init__(self, path, net, run_config: RunConfig, out_log=True, measure_latency=None, local_rank=-1, find_unused_parameters=True):
         self.path = path
         self.net = net
         self.run_config = run_config
@@ -185,7 +185,7 @@ class RunManager:
         if torch.cuda.is_available():
             self.device = torch.device('cuda', self.local_rank)
             self.net.to(self.device)
-            self.net = DistributedDataParallel(self.net, device_ids=[self.local_rank], find_unused_parameters=True)
+            self.net = DistributedDataParallel(self.net, device_ids=[self.local_rank], find_unused_parameters=find_unused_parameters)
             cudnn.benchmark = True
         else:
             raise ValueError

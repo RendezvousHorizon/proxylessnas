@@ -90,7 +90,7 @@ class ImagenetDataProvider(DataProvider):
             )
         else:
             self.train = torch.utils.data.DataLoader(
-                train_dataset, batch_size=train_batch_size, shuffle=True,
+                train_dataset, batch_size=train_batch_size, sampler=DistributedSampler(train_dataset),
                 num_workers=n_worker, pin_memory=True,
             )
             self.valid = None

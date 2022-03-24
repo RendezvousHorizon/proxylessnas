@@ -4,13 +4,14 @@ import os, os.path as osp
 import math
 import argparse
 
+import torch
 import torch.backends.cudnn as cudnn
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import torch.utils.data.distributed
+import torch.distributed as dist
 from torchvision import datasets, transforms
-import horovod.torch as hvd
 import tensorboardX
 from tqdm import tqdm
 
@@ -27,6 +28,7 @@ model_names = sorted(name for name in models.__dict__
 # Training settings
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Example',
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+parser.add_argument('--local_rank', type=int)
 
 parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet50',
                     choices=model_names,
@@ -36,16 +38,16 @@ parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet50',
 parser.add_argument('--num-classes', type=int, default=1000,
                     help='The number of classes in the dataset.')
 
-parser.add_argument('--train-dir', default=os.path.expanduser('/ssd/dataset/imagenet/train'),
+parser.add_argument('--train-dir', default=os.path.expanduser('/data/data0/v-xudongwang/imagenet/train'),
                     help='path to training data')
-parser.add_argument('--val-dir', default=os.path.expanduser('/ssd/dataset/imagenet/val'),
+parser.add_argument('--val-dir', default=os.path.expanduser('/data/data0/v-xudongwang/imagenet/val'),
                     help='path to validation data')
 parser.add_argument('--log-dir', default='./logs',
                     help='tensorboard log directory')
 parser.add_argument('--format', default='./checkpoint-{epoch}.pth.tar',
                     help='checkpoint file format')
-parser.add_argument('--fp16-allreduce', action='store_true', default=False,
-                    help='use fp16 compression during allreduce')
+# parser.add_argument('--fp16-allreduce', action='store_true', default=False,
+#                     help='use fp16 compression during allreduce')
 
 # Default settings from https://arxiv.org/abs/1706.02677.
 parser.add_argument('--batch-size', type=int, default=64,
@@ -93,12 +95,12 @@ args.base_lr = args.base_lr * (args.batch_size / 64)
 
 args.cuda = not args.no_cuda and torch.cuda.is_available()
 
-hvd.init()
+dist.init_process_group(backend='nccl')
 torch.manual_seed(args.seed)
 
 if args.cuda:
     # Horovod: pin GPU to local rank.
-    torch.cuda.set_device(hvd.local_rank())
+    torch.cuda.set_device(dist.get_rank())
     torch.cuda.manual_seed(args.seed)
 
 cudnn.benchmark = True
@@ -112,14 +114,13 @@ for try_epoch in range(args.epochs, 0, -1):
 
 # Horovod: broadcast resume_from_epoch from rank 0 (which will have
 # checkpoints) to other ranks.
-resume_from_epoch = hvd.broadcast(torch.tensor(resume_from_epoch), root_rank=0,
-                                  name='resume_from_epoch').item()
+# resume_from_epoch = hvd.broadcast(torch.tensor(resume_from_epoch), root_rank=0,
+#                                   name='resume_from_epoch').item()
 
 # Horovod: print logs on the first worker.
-verbose = 1 if hvd.rank() == 0 else 0
-
+verbose = 1 if dist.get_rank() == 0 else 0
 # Horovod: write TensorBoard logs on first worker.
-log_writer = tensorboardX.SummaryWriter(args.log_dir) if hvd.rank() == 0 else None
+log_writer = tensorboardX.SummaryWriter(args.log_dir) if dist.get_rank() == 0 else None
 best_val_acc = 0.0
 
 kwargs = {'num_workers': 5, 'pin_memory': True} if args.cuda else {}
@@ -139,9 +140,9 @@ pre_process += [
 train_dataset = datasets.ImageFolder(args.train_dir,
                          transform=transforms.Compose(pre_process))
 # Horovod: use DistributedSampler to partition data among workers. Manually specify
-# `num_replicas=hvd.size()` and `rank=hvd.rank()`.
+# `num_replicas=dist.get_rank()size()` and `rank=dist.get_rank()`.
 train_sampler = torch.utils.data.distributed.DistributedSampler(
-    train_dataset, num_replicas=hvd.size(), rank=hvd.rank())
+    train_dataset, num_replicas=dist.get_world_size(), rank=dist.get_rank())
 train_loader = torch.utils.data.DataLoader(
     train_dataset, batch_size=args.batch_size, sampler=train_sampler, **kwargs)
 
@@ -153,34 +154,35 @@ val_dataset = datasets.ImageFolder(args.val_dir,
                              normalize
                          ]))
 val_sampler = torch.utils.data.distributed.DistributedSampler(
-    val_dataset, num_replicas=hvd.size(), rank=hvd.rank())
+    val_dataset, num_replicas=dist.get_world_size(), rank=dist.get_rank())
 val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=args.val_batch_size,
                                          sampler=val_sampler, **kwargs)
 
 
 # Set up standard ResNet-50 model.
 # model = models.resnet50()
-model = models.__dict__[args.arch](num_classes=args.num_classes)
+model = models.__dict__[args.arch](pretrained=False)
+device = torch.device('cuda', args.local_rank)
+model.to(device)
+model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank])
 
-if args.cuda:
-    # Move model to GPU.
-    model.cuda()
 
 # Horovod: scale learning rate by the number of GPUs.
-optimizer = optim.SGD(model.parameters(), lr=args.base_lr * hvd.size(),
+optimizer = optim.SGD(model.parameters(), lr=args.base_lr * dist.get_world_size(),
                       momentum=args.momentum, weight_decay=args.wd)
 
-# Horovod: (optional) compression algorithm.
-compression = hvd.Compression.fp16 if args.fp16_allreduce else hvd.Compression.none
+# use torch ddp instead of horovod
+# # Horovod: (optional) compression algorithm.
+# compression = hvd.Compression.fp16 if args.fp16_allreduce else hvd.Compression.none
 
-# Horovod: wrap optimizer with DistributedOptimizer.
-optimizer = hvd.DistributedOptimizer(optimizer,
-                                     named_parameters=model.named_parameters(),
-                                     compression=compression)
+# # Horovod: wrap optimizer with DistributedOptimizer.
+# optimizer = hvd.DistributedOptimizer(optimizer,
+#                                      named_parameters=model.named_parameters(),
+#                                      compression=compression)
 
 # Restore from a previous checkpoint, if initial_epoch is specified.
 # Horovod: restore on the first worker which will broadcast weights to other workers.
-if resume_from_epoch > 0 and hvd.rank() == 0:
+if resume_from_epoch > 0 and dist.get_rank() == 0:
     filepath = args.checkpoint_format.format(epoch=resume_from_epoch)
     checkpoint = torch.load(filepath)
     model.load_state_dict(checkpoint['model'])
@@ -191,10 +193,10 @@ if args.label_smoothing:
 else:
     criterion = nn.CrossEntropyLoss()
 
-
-# Horovod: broadcast parameters & optimizer state.
-hvd.broadcast_parameters(model.state_dict(), root_rank=0)
-hvd.broadcast_optimizer_state(optimizer, root_rank=0)
+# use torch ddp instead of horovod
+# # Horovod: broadcast parameters & optimizer state.
+# hvd.broadcast_parameters(model.state_dict(), root_rank=0)
+# hvd.broadcast_optimizer_state(optimizer, root_rank=0)
 
 
 def train(epoch):
@@ -260,14 +262,14 @@ def validate(epoch, ):
     return val_accuracy.avg
 
 import torch.optim.lr_scheduler as lr_scheduler
-# Horovod: using `lr = base_lr * hvd.size()` from the very beginning leads to worse final
-# accuracy. Scale the learning rate `lr = base_lr` ---> `lr = base_lr * hvd.size()` during
+# Horovod: using `lr = base_lr * dist.get_world_size()()` from the very beginning leads to worse final
+# accuracy. Scale the learning rate `lr = base_lr` ---> `lr = base_lr * dist.get_world_size()()` during
 # the first five epochs. See https://arxiv.org/abs/1706.02677 for details.
 # After the warmup reduce learning rate by 10 on the 30th, 60th and 80th epochs.
 def adjust_learning_rate(epoch, batch_idx, type="cosine"):
     if epoch < args.warmup_epochs:
         epoch += float(batch_idx + 1) / len(train_loader)
-        lr_adj = 1. / hvd.size() * (epoch * (hvd.size() - 1) / args.warmup_epochs + 1)
+        lr_adj = 1. / dist.get_world_size() * (epoch * (dist.get_world_size() - 1) / args.warmup_epochs + 1)
     elif type == "linear":
         if epoch < 30:
             lr_adj = 1.
@@ -287,8 +289,8 @@ def adjust_learning_rate(epoch, batch_idx, type="cosine"):
         lr_adj = 0.5  * (1 + math.cos(math.pi * T_cur / T_total))
 
     for param_group in optimizer.param_groups:
-        param_group['lr'] = args.base_lr * hvd.size() * lr_adj
-    return args.base_lr * hvd.size() * lr_adj
+        param_group['lr'] = args.base_lr * dist.get_world_size() * lr_adj
+    return args.base_lr * dist.get_world_size() * lr_adj
 
 
 def accuracy(output, target):
@@ -298,7 +300,7 @@ def accuracy(output, target):
 
 
 def save_checkpoint(epoch):
-    if hvd.rank() == 0:
+    if dist.get_rank() == 0:
         os.remove(args.checkpoint_format.format(epoch=epoch))
         filepath = args.checkpoint_format.format(epoch=epoch + 1)
         state = {
@@ -308,20 +310,26 @@ def save_checkpoint(epoch):
         torch.save(state, filepath)
 
 
-# Horovod: average metrics from distributed training.
 class Metric(object):
+
     def __init__(self, name):
         self.name = name
-        self.sum = torch.tensor(0.)
-        self.n = torch.tensor(0.)
+        self.sum = torch.zeros(1)[0]
+        self.count = torch.zeros(1)[0]
 
-    def update(self, val):
-        self.sum += hvd.allreduce(val.detach().cpu(), name=self.name)
-        self.n += 1
+    def update(self, val: torch.Tensor, delta_n=1):
+        import torch.distributed as dist
+        
+        val *= delta_n
+        val = val.to(device)
+        dist.all_reduce(val.detach())
+        self.sum += val.cpu() / dist.get_world_size()
+        self.count += delta_n
 
     @property
     def avg(self):
-        return self.sum / self.n
+        return self.sum / self.count
+
 
 
 best_acc = 0.0
@@ -331,7 +339,7 @@ for epoch in range(resume_from_epoch, args.epochs):
     val_acc = validate(epoch)
 
     # save checkpoint for the master
-    if hvd.rank() == 0:
+    if dist.get_rank() == 0:
         if last_saved_epoch is not None:
             os.remove(args.checkpoint_format.format(epoch=last_saved_epoch))
         filepath = args.checkpoint_format.format(epoch=epoch)
